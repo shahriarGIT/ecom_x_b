@@ -55,6 +55,7 @@ mongoose.connect(process.env.MONGODB_URL, options).then(
 // app.get("/", (req, res) => {
 //   res.send({ hello: "HELLO" });
 // });
+// "start": "nodemon --watch --exec node --experimental-modules server.js"
 
 app.use("/api/products", productRouter);
 app.use("/api/user", userRouter);
