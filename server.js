@@ -3,6 +3,7 @@ import dotenv from "dotenv";
 import mongoose from "mongoose";
 import cors from "cors";
 import path from "path";
+import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 
 import productRouter from "./routers/productRouter.js";
 import userRouter from "./routers/userRouter.js";
@@ -56,6 +57,7 @@ mongoose.connect(process.env.MONGODB_URL, options).then(
 //   res.send({ hello: "HELLO" });
 // });
 // "start": "nodemon --watch --exec node --experimental-modules server.js"
+//"start": "node server.js"
 
 app.use("/api/products", productRouter);
 app.use("/api/user", userRouter);

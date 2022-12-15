@@ -1,12 +1,37 @@
 import express from "express";
 import expressAsyncHandler from "express-async-handler";
 import Product from "../models/productModel.js";
-
+import multer from "multer";
+import dotenv from "dotenv";
 import { isAdmin, isAuth } from "../utils.js";
+import {
+  S3Client,
+  PutObjectCommand,
+  GetObjectCommand,
+  DeleteObjectCommand,
+} from "@aws-sdk/client-s3";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+import crypto from "crypto";
+import sharp from "sharp";
 
-import data from "../data.js";
+dotenv.config();
+
+const bucketRegion = process.env.BUCKET_REGION;
+const bucketName = process.env.BUCKET_NAME;
+const bucketAccessKey = process.env.BUCKET_ACCESS_KEY;
+const bucketSecretKey = process.env.BUCKET_SECRET_KEY;
+
+// import data from "../data.js";
 
 const productRouter = express.Router();
+
+const s3 = new S3Client({
+  credentials: {
+    accessKeyId: bucketAccessKey,
+    secretAccessKey: bucketSecretKey,
+  },
+  region: bucketRegion,
+});
 
 productRouter.get(
   "/addProduct",
@@ -49,6 +74,17 @@ productRouter.get(
       .skip(numberOfProductsInPage * (pageNumber - 1)) // -1 bcoz in page 1 skip 0 item
       .limit(numberOfProductsInPage);
 
+    for (let p of products) {
+      const getObjParams = {
+        Bucket: bucketName,
+        Key: p.image,
+      };
+
+      const command = new GetObjectCommand(getObjParams);
+      const url = await getSignedUrl(s3, command, { expiresIn: 3600 });
+      p.imageURL = url;
+    }
+
     res.send({
       products,
       page: pageNumber,
@@ -71,6 +107,15 @@ productRouter.get(
     const productId = req.params.id;
     const productDetail = await Product.findById(productId);
 
+    const getObjParams = {
+      Bucket: bucketName,
+      Key: productDetail.image,
+    };
+
+    const command = new GetObjectCommand(getObjParams);
+    const url = await getSignedUrl(s3, command, { expiresIn: 3600 });
+    productDetail.imageURL = url;
+
     if (!productDetail) {
       res.status(404).send({ message: "Product Not Found" });
     }
@@ -89,6 +134,14 @@ productRouter.delete(
     const product = await Product.findById(productId);
 
     if (product) {
+      const getObjParams = {
+        Bucket: bucketName,
+        Key: product.image,
+      };
+
+      const command = new DeleteObjectCommand(getObjParams);
+      s3.send(command);
+
       const deletedProduct = await product.remove();
 
       return res.send({ message: "Product Deleted", product: deletedProduct });
@@ -98,26 +151,54 @@ productRouter.delete(
   })
 );
 
+const uploadImageBucket = async () => {};
+
+const randomImageName = (bytes = 32) =>
+  crypto.randomBytes(bytes).toString("hex");
+
+//const buffer =await sharp.apply(req.file.buffer).resize({height:400,width: 250,fit:"contain"}).toBuffer();
+
+const storage = multer.memoryStorage();
+const upload = multer({ storage: storage });
+
 productRouter.put(
   "/:id",
+  upload.single("image"),
   isAuth,
   isAdmin,
   expressAsyncHandler(async (req, res) => {
     const productId = req.params.id;
 
+    //Key: req.body.name, // image name ( req.body.name) here if we upload 2image with same
+    // name then the image will overwrite so we need unique key
+    //Body: req.file.buffer, // actual image in binary
+    //ContentType: req.file.mimetype, // file type
+
     const product = await Product.findById(productId);
 
     if (product) {
+      const generatedImageName = randomImageName();
+      const params = {
+        Bucket: bucketName,
+        Key: generatedImageName,
+        Body: req.file.buffer, // actual image in binary
+        ContentType: req.file.mimetype, // file type
+      };
+
+      const command = new PutObjectCommand(params);
+
+      const imguploadSuccess = await s3.send(command);
+
       product.name = req.body.name;
       product.price = req.body.price;
       product.brand = req.body.brand;
       product.category = req.body.category;
       product.description = req.body.description;
       product.countInStock = req.body.countInStock;
-      product.image = req.body.image;
+      product.image = generatedImageName;
+      product.imageURL = "";
 
       const savedProduct = await product.save();
-      //console.log(product, "after update");
 
       return res.send({ product: savedProduct, message: "Product Updated" });
     } else {
