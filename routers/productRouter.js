@@ -83,12 +83,12 @@ productRouter.get(
       let url = await getSignedUrl(s3, command, { expiresIn: 3600 });
       p.imageURL = url;
 
-      getObjParams = {
+      let getObjParams2 = {
         Bucket: bucketName,
         Key: p.imageZoomed,
       };
-      command = new GetObjectCommand(getObjParams);
-      let url2 = await getSignedUrl(s3, command, { expiresIn: 3600 });
+      let command2 = new GetObjectCommand(getObjParams2);
+      let url2 = await getSignedUrl(s3, command2, { expiresIn: 3600 });
       p.imageZoomedURL = url2;
     }
 
