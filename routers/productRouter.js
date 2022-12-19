@@ -50,7 +50,7 @@ productRouter.get(
     const order = req.query.order || "";
     const pageNumber = Number(req.query.pageNumber) || 1;
 
-    const numberOfProductsInPage = 6;
+    const numberOfProductsInPage = 12;
 
     const nameFilter = name ? { name: { $regex: name, $options: "i" } } : {};
     const categoryFilter = category ? { category } : {};

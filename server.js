@@ -3,7 +3,6 @@ import dotenv from "dotenv";
 import mongoose from "mongoose";
 import cors from "cors";
 import path from "path";
-import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 
 import productRouter from "./routers/productRouter.js";
 import userRouter from "./routers/userRouter.js";
