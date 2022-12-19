@@ -75,14 +75,21 @@ productRouter.get(
       .limit(numberOfProductsInPage);
 
     for (let p of products) {
-      const getObjParams = {
+      let getObjParams = {
         Bucket: bucketName,
         Key: p.image,
       };
-
-      const command = new GetObjectCommand(getObjParams);
-      const url = await getSignedUrl(s3, command, { expiresIn: 3600 });
+      let command = new GetObjectCommand(getObjParams);
+      let url = await getSignedUrl(s3, command, { expiresIn: 3600 });
       p.imageURL = url;
+
+      getObjParams = {
+        Bucket: bucketName,
+        Key: p.imageZoomed,
+      };
+      command = new GetObjectCommand(getObjParams);
+      let url2 = await getSignedUrl(s3, command, { expiresIn: 3600 });
+      p.imageZoomedURL = url2;
     }
 
     res.send({
@@ -134,12 +141,19 @@ productRouter.delete(
     const product = await Product.findById(productId);
 
     if (product) {
-      const getObjParams = {
+      let getObjParams = {
         Bucket: bucketName,
         Key: product.image,
       };
 
-      const command = new DeleteObjectCommand(getObjParams);
+      let command = new DeleteObjectCommand(getObjParams);
+      s3.send(command);
+
+      getObjParams = {
+        Bucket: bucketName,
+        Key: product.imageZoomed,
+      };
+      command = new DeleteObjectCommand(getObjParams);
       s3.send(command);
 
       const deletedProduct = await product.remove();
@@ -161,13 +175,25 @@ const randomImageName = (bytes = 32) =>
 const storage = multer.memoryStorage();
 const upload = multer({ storage: storage });
 
+const uploadMultiple = upload.fields([
+  { name: "image" },
+  { name: "imageZoomed" },
+]);
+// upload.single("image"),
+
 productRouter.put(
   "/:id",
-  upload.single("image"),
+  uploadMultiple,
   isAuth,
   isAdmin,
   expressAsyncHandler(async (req, res) => {
     const productId = req.params.id;
+
+    // Files from multer
+    // console.log(req.files.image[0].originalname);
+    // console.log(req.files.image[0].buffer);
+    // console.log(req.files.imageZoomed[0].originalname);
+    // console.log(req.files.imageZoomed[0].buffer);
 
     //Key: req.body.name, // image name ( req.body.name) here if we upload 2image with same
     // name then the image will overwrite so we need unique key
@@ -181,13 +207,25 @@ productRouter.put(
       const params = {
         Bucket: bucketName,
         Key: generatedImageName,
-        Body: req.file.buffer, // actual image in binary
-        ContentType: req.file.mimetype, // file type
+        Body: req.files.image[0].buffer, // actual image in binary
+        ContentType: req.files.image[0].mimetype, // file type
       };
 
       const command = new PutObjectCommand(params);
 
       const imguploadSuccess = await s3.send(command);
+
+      const generatedImageZoomedName = randomImageName();
+      const params2 = {
+        Bucket: bucketName,
+        Key: generatedImageZoomedName,
+        Body: req.files.imageZoomed[0].buffer, // actual image in binary
+        ContentType: req.files.imageZoomed[0].mimetype, // file type
+      };
+
+      const command2 = new PutObjectCommand(params2);
+
+      const imguploadSuccess2 = await s3.send(command2);
 
       product.name = req.body.name;
       product.price = req.body.price;
@@ -197,6 +235,8 @@ productRouter.put(
       product.countInStock = req.body.countInStock;
       product.image = generatedImageName;
       product.imageURL = "";
+      product.imageZoomed = generatedImageZoomedName;
+      product.imageZoomedURL = "";
 
       const savedProduct = await product.save();
 
@@ -221,7 +261,8 @@ productRouter.post(
       description: "Sample Description",
       rating: 0,
       numReviews: 0,
-      image: "/images/p10.jpg",
+      image: "sample.jpg",
+      imageZoomed: "sample2.jpg",
     });
 
     const createdProduct = await product.save();
